@@ -14,10 +14,16 @@ st.set_page_config(
 # --- Custom Styling (Glassmorphism & Premium UI) ---
 st.markdown("""
 <style>
-    /* Gradient Background */
+    /* Compact UI & Hide Scrollbar */
     .stApp {
         background: linear-gradient(135deg, #1e1e2e 0%, #2d2d44 100%);
         color: #e0e0e0;
+        overflow: hidden; /* Try to fit in one screen */
+    }
+    
+    /* Hide Main Scrollbar */
+    ::-webkit-scrollbar {
+        display: none;
     }
     
     /* Sidebar Styling */
@@ -26,49 +32,24 @@ st.markdown("""
         border-right: 1px solid rgba(255, 255, 255, 0.1);
     }
     
-    /* Cards/Metrics */
+    /* Compact Metrics */
     div[data-testid="metric-container"] {
         background: rgba(255, 255, 255, 0.05);
         border: 1px solid rgba(255, 255, 255, 0.1);
-        padding: 15px;
-        border-radius: 12px;
+        padding: 10px; /* Reduced padding */
+        border-radius: 8px;
         backdrop-filter: blur(10px);
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        transition: transform 0.2s;
-    }
-    div[data-testid="metric-container"]:hover {
-        transform: translateY(-2px);
-        background: rgba(255, 255, 255, 0.08);
     }
     
     /* Headers */
-    h1, h2, h3 {
-        color: #ffffff !important;
-        font-family: 'Inter', sans-serif;
-        font-weight: 600;
-    }
+    h1 { font-size: 1.8rem !important; margin-bottom: 0px !important; }
+    h2 { font-size: 1.4rem !important; }
+    h3 { font-size: 1.1rem !important; margin-top: 0px !important; }
     
-    /* DataFrame Styling */
-    div[data-testid="stDataFrame"] {
-        background: rgba(255, 255, 255, 0.02);
-        border-radius: 10px;
-        overflow: hidden;
-    }
-    
-    /* Custom Scrollbar */
-    ::-webkit-scrollbar {
-        width: 8px;
-        height: 8px;
-    }
-    ::-webkit-scrollbar-track {
-        background: #1e1e2e;
-    }
-    ::-webkit-scrollbar-thumb {
-        background: #5c5c7f;
-        border-radius: 4px;
-    }
-    ::-webkit-scrollbar-thumb:hover {
-        background: #7a7a9f;
+    /* Reduce whitespace */
+    .block-container {
+        padding-top: 2rem !important;
+        padding-bottom: 0rem !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -79,21 +60,12 @@ def load_data():
     url = "https://docs.google.com/spreadsheets/d/1rOCXlnzaxTv0-pPKHhgGuQ9MgvNCgcKq_UCrLK7B2Gs/export?format=csv"
     try:
         df = pd.read_csv(url)
-        
-        # Clean column names (remove extra spaces and colons)
         df.columns = df.columns.str.strip().str.replace(' :', '').str.replace(':', '')
-        
-        # Date conversion
-        # First try converting with infer_datetime_format, if that fails or leaves object, specify format if known or coerce
-        # The sample shows "15-Jan-2026", which pandas usually parses well
         df['Issue date'] = pd.to_datetime(df['Issue date'], errors='coerce')
-        
-        # Numeric conversion for key columns
         numeric_cols = ['Requisition Quantity', 'Issue Quantity', 'Pending Issue Quantity', 'Line Item Total', 'Item Rate']
         for col in numeric_cols:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
-                
         return df
     except Exception as e:
         st.error(f"Error loading data: {e}")
@@ -101,12 +73,9 @@ def load_data():
 
 # --- Sidebar Filters ---
 st.sidebar.title("🔍 Filters")
-
-# Refresh Button
-if st.sidebar.button("🔄 Refresh Data", help="Click to reload data from Google Sheets"):
+if st.sidebar.button("🔄 Refresh", help="Reload data"):
     st.cache_data.clear()
     st.rerun()
-
 st.sidebar.markdown("---")
 
 df = load_data()
@@ -116,148 +85,69 @@ def format_currency(val):
     return f"₹{val:,.2f}"
 
 if not df.empty:
-    # 1. Date Filter (Monthly)
-    df['Month_Year'] = df['Issue date'].dt.strftime('%b-%Y') # e.g., Jan-2026
-    # Sort months chronologically
+    df['Month_Year'] = df['Issue date'].dt.strftime('%b-%Y')
     df = df.sort_values('Issue date', ascending=False)
     available_months = df['Month_Year'].unique().tolist()
     
-    selected_months = st.sidebar.multiselect(
-        "Select Month(s)",
-        options=available_months,
-        default=available_months[:1] if available_months else None,
-        help="Filter data by specific months"
-    )
-
-    # 2. Cost Center Filter
+    selected_months = st.sidebar.multiselect("Month", options=available_months, default=available_months[:1] if available_months else None)
+    
     cost_centers = sorted(df['Requesting Cost Center'].astype(str).unique().tolist())
-    selected_cc = st.sidebar.multiselect(
-        "Requesting Cost Center",
-        options=cost_centers,
-        placeholder="All Cost Centers"
-    )
+    selected_cc = st.sidebar.multiselect("Cost Center", options=cost_centers)
 
-    # 3. Item Name Filter
     items = sorted(df['Item Name'].astype(str).unique().tolist())
-    selected_items = st.sidebar.multiselect(
-        "Item Name",
-        options=items,
-        placeholder="All Items"
-    )
+    selected_items = st.sidebar.multiselect("Item", options=items)
     
-    # --- Filtering Logic ---
+    # Filter
     filtered_df = df.copy()
-    
-    if selected_months:
-        filtered_df = filtered_df[filtered_df['Month_Year'].isin(selected_months)]
-    
-    if selected_cc:
-        filtered_df = filtered_df[filtered_df['Requesting Cost Center'].isin(selected_cc)]
-        
-    if selected_items:
-        filtered_df = filtered_df[filtered_df['Item Name'].isin(selected_items)]
+    if selected_months: filtered_df = filtered_df[filtered_df['Month_Year'].isin(selected_months)]
+    if selected_cc: filtered_df = filtered_df[filtered_df['Requesting Cost Center'].isin(selected_cc)]
+    if selected_items: filtered_df = filtered_df[filtered_df['Item Name'].isin(selected_items)]
 
 else:
-    st.warning("No data loaded. Please check the source.")
+    st.warning("No data.")
     st.stop()
 
 # --- Main Dashboard ---
-st.title("📊 Supply Chain Analytics")
-st.markdown(f"**Data Overview for:** {' | '.join(selected_months) if selected_months else 'All Time'}")
+st.title("Supply Chain Analytics")
+st.caption(f"Overview: {' | '.join(selected_months) if selected_months else 'All Time'}")
 
 # --- KPIs ---
 kpi1, kpi2, kpi3, kpi4 = st.columns(4)
-
-total_spend = filtered_df['Line Item Total'].sum()
-total_issued_qty = filtered_df['Issue Quantity'].sum()
-unique_items = filtered_df['Item Code'].nunique()
-active_ccs = filtered_df['Requesting Cost Center'].nunique()
-
-with kpi1:
-    st.metric("Total Spend", format_currency(total_spend), delta_color="normal")
-with kpi2:
-    st.metric("Total Units Issued", f"{total_issued_qty:,.0f}")
-with kpi3:
-    st.metric("Unique Items", unique_items)
-with kpi4:
-    st.metric("Active Cost Centers", active_ccs)
+with kpi1: st.metric("Total Spend", format_currency(filtered_df['Line Item Total'].sum()))
+with kpi2: st.metric("Units Issued", f"{filtered_df['Issue Quantity'].sum():,.0f}")
+with kpi3: st.metric("Unique Items", filtered_df['Item Code'].nunique())
+with kpi4: st.metric("Cost Centers", filtered_df['Requesting Cost Center'].nunique())
 
 st.markdown("---")
 
-# --- Charts Section ---
-c1, c2 = st.columns([1, 1], gap="large")
+# --- Charts (Compact) ---
+c1, c2 = st.columns(2)
 
 with c1:
     st.subheader("💰 Spend by Cost Center")
     if not filtered_df.empty:
-        # Group by CC and sum Line Item Total
-        cc_spend = filtered_df.groupby('Requesting Cost Center')['Line Item Total'].sum().reset_index()
-        cc_spend = cc_spend.sort_values('Line Item Total', ascending=True).tail(10) # Top 10
-        
-        fig_cc = px.bar(
-            cc_spend,
-            x='Line Item Total',
-            y='Requesting Cost Center',
-            orientation='h',
-            text_auto='.2s',
-            color='Line Item Total',
-            color_continuous_scale='Viridis'
-        )
-        fig_cc.update_layout(
-            plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)',
-            font_color='#e0e0e0',
-            xaxis_title="Total Cost (₹)",
-            yaxis_title=None,
-            showlegend=False
-        )
+        cc_spend = filtered_df.groupby('Requesting Cost Center')['Line Item Total'].sum().reset_index().sort_values('Line Item Total', ascending=True).tail(8)
+        fig_cc = px.bar(cc_spend, x='Line Item Total', y='Requesting Cost Center', orientation='h', text_auto='.2s', color='Line Item Total', color_continuous_scale='Viridis')
+        fig_cc.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', font_color='#e0e0e0', xaxis_title=None, yaxis_title=None, showlegend=False, margin=dict(l=0, r=0, t=0, b=0), height=300)
         st.plotly_chart(fig_cc, use_container_width=True)
-    else:
-        st.info("No data for charts")
 
 with c2:
-    st.subheader("📈 Top Items by Quantity")
+    st.subheader("📈 Top Items")
     if not filtered_df.empty:
-        item_qty = filtered_df.groupby('Item Name')['Issue Quantity'].sum().reset_index()
-        item_qty = item_qty.sort_values('Issue Quantity', ascending=False).head(10)
-        
-        fig_item = px.pie(
-            item_qty,
-            values='Issue Quantity',
-            names='Item Name',
-            hole=0.4,
-            color_discrete_sequence=px.colors.sequential.Bluyl
-        )
-        fig_item.update_layout(
-            plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)',
-            font_color='#e0e0e0',
-            showlegend=True,
-            legend=dict(orientation="h", y=-0.1)
-        )
+        item_qty = filtered_df.groupby('Item Name')['Issue Quantity'].sum().reset_index().sort_values('Issue Quantity', ascending=False).head(8)
+        fig_item = px.pie(item_qty, values='Issue Quantity', names='Item Name', hole=0.5, color_discrete_sequence=px.colors.sequential.Bluyl)
+        fig_item.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', font_color='#e0e0e0', showlegend=True, legend=dict(orientation="v", yanchor="top", y=1, xanchor="left", x=1.05), margin=dict(l=0, r=0, t=0, b=0), height=300)
         st.plotly_chart(fig_item, use_container_width=True)
-    else:
-        st.info("No data for charts")
 
-# --- Detailed Data View ---
-st.subheader("📋 Detailed Requisition Log")
-with st.expander("View Full Data Table", expanded=True):
-    # Select relevant columns to display
-    display_cols = [
-        'Issue date', 'Issue Number', 'Requesting Cost Center', 'Item Name', 
-        'Category', 'UOM', 'Issue Quantity', 'Item Rate', 'Line Item Total', 'Issue Status'
-    ]
-    # Filter columns that actually exist in the dataframe
-    valid_cols = [c for c in display_cols if c in filtered_df.columns]
-    
+# --- Data Table (Collapsed) ---
+with st.expander("Show Data Log", expanded=False):
     st.dataframe(
-        filtered_df[valid_cols].sort_values('Issue date', ascending=False),
-        use_container_width=True,
+        filtered_df[['Issue date', 'Requesting Cost Center', 'Item Name', 'Issue Quantity', 'Line Item Total']].sort_values('Issue date', ascending=False),
+        width="stretch",
         hide_index=True,
         column_config={
-            "Issue date": st.column_config.DateColumn("Date", format="DD MMM YYYY"),
-            "Line Item Total": st.column_config.NumberColumn("Total Cost", format="₹%.2f"),
-            "Item Rate": st.column_config.NumberColumn("Rate", format="₹%.2f"),
+            "Issue date": st.column_config.DateColumn("Date", format="DD MMM"),
+            "Line Item Total": st.column_config.NumberColumn("Cost", format="₹%.0f"),
         }
     )
 
