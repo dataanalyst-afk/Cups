@@ -74,7 +74,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- Data Loading ---
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=5)
 def load_data():
     url = "https://docs.google.com/spreadsheets/d/1rOCXlnzaxTv0-pPKHhgGuQ9MgvNCgcKq_UCrLK7B2Gs/export?format=csv"
     try:
@@ -99,15 +99,21 @@ def load_data():
         st.error(f"Error loading data: {e}")
         return pd.DataFrame()
 
+# --- Sidebar Filters ---
+st.sidebar.title("🔍 Filters")
+
+# Refresh Button
+if st.sidebar.button("🔄 Refresh Data", help="Click to reload data from Google Sheets"):
+    st.cache_data.clear()
+    st.rerun()
+
+st.sidebar.markdown("---")
+
 df = load_data()
 
 # --- Helpers ---
 def format_currency(val):
     return f"₹{val:,.2f}"
-
-# --- Sidebar Filters ---
-st.sidebar.title("🔍 Filters")
-st.sidebar.markdown("---")
 
 if not df.empty:
     # 1. Date Filter (Monthly)
